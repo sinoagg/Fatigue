@@ -4,6 +4,7 @@ import urllib.request
 from urllib.request import urlopen
 import cv2
 import time
+import serial
 
 def check4G():
 	sock_p_counter = 0
@@ -38,54 +39,68 @@ def check4G():
 #	else:
 #		print("Camera ------------- Check")
 
-def checkPowerBoard()
-
 
 def serialRead(serial_handle):
 	serial_handle.flushInput()
+	counter = 0
 	while 1:
+		counter += 1
 		din = serial_handle.read(28)
-		if din[0]==52 and din[1] == 52 and din[2] == 53 and din[3] == 57:
+#		print("din in serialRead----------",len(din))
+		if len(din) == 0:
+			time.sleep(0.5)
+			if counter == 30:
+				print("Can not read data from serial port, please check port connection")
+				break
+			else:
+				continue
+		if din[0]==52 and din[1] == 52 and din[2] == 53 and din[3] == 57 :
+			break
+		if counter == 30 :
+			print("Can not read data from serial port, please check port connection")
 			break
 		serial_handle.flushInput()
+
 	dout = din.decode('utf-8')
 	return dout
 
 
-def getVelocity():
-	din = serialRead()
-	status_byte = int(din[8:10])
+def getVelocity(serial_handle):
+	din = serialRead(serial_handle)
+	status_byte = int(din[8:10],16)
+	print("Din for speed: ", din)
 	velocity_source = ""
 	if (status_byte & 128) == 128:
 		velocity_source = "CAN"
-		print("Speed source: " velocity_source)
-		velocity = int(din[10:12])
+		print("Speed source: " ,velocity_source)
+		velocity = int(din[10:12],16)
 		print("Speed is: ", velocity)
 	elif (status_byte & 64) == 64:
 		velocity_source = "Yingxian"
-		print("Speed source: " velocity_source)
-		velocity = int(din[10:12])
+		print("Speed source: ",velocity_source)
+		velocity = int(din[10:12],16)
 		print("Speed is: ", velocity)
 	elif (status_byte & 32) == 32:
 		velocity_source = "Yingxian"
-		print("Speed source: " velocity_source)
-		velocity = int(din[10:12])
+		print("Speed source: " ,velocity_source)
+		velocity = int(din[10:12],16)
 		print("Speed is: ", velocity)
 	else:
 		print("Failed to get speed from CAN, Yingxian, GPS")
 		velocity = 0
 
-def checkGPS():
-	din = serialRead()
-	status_byte = int(din[8:10])
+def checkGPS(serial_handle):
+	din = serialRead(serial_handle)
+	print("Din for GPS: ",din)
+	status_byte = int(din[8:10],16)
 	if (status_byte & 16) == 16:
 		print("GPS -------------- Check")
 	else:
-		print("GPS ------------ Failed")
+		print("GPS -------------- Failed")
 
 
+serial_handle = serial.Serial(port='/dev/ttyAMA0',baudrate=19200,bytesize=8,timeout=1)
 check4G()
-checkCam()
-getVelocity()
-checkGPS()
+getVelocity(serial_handle)
+checkGPS(serial_handle)
 
