@@ -5,6 +5,7 @@ from urllib.request import urlopen
 import cv2
 import time
 import serial
+import struct
 
 def check4G():
 	sock_p_counter = 0
@@ -42,61 +43,74 @@ def check4G():
 
 def serialRead(serial_handle):
 	serial_handle.flushInput()
-	counter = 0
+	cnt = 0
 	while 1:
-		counter += 1
 		din = serial_handle.read(28)
-#		print("din in serialRead----------",len(din))
-		if len(din) == 0:
-			time.sleep(0.5)
-			if counter == 30:
-				print("Can not read data from serial port, please check port connection")
-				break
-			else:
-				continue
-		if din[0]==52 and din[1] == 52 and din[2] == 53 and din[3] == 57 :
-			break
-		if counter == 30 :
-			print("Can not read data from serial port, please check port connection")
-			break
+		cnt += 1
+		if len(din) == 0 and cnt < 8:
+			#			print("cnt is ",cnt)
+			continue
+		if len(din) ==28 and  din[0]==52 and din[1] == 52 and din[2] == 53 and din[3] == 57:
+			return din.decode('utf-8')
+		elif cnt == 8:
+			print("Can not receive data from power board")
+			return ""
 		serial_handle.flushInput()
-
-	dout = din.decode('utf-8')
-	return dout
 
 
 def getVelocity(serial_handle):
 	din = serialRead(serial_handle)
+	if din == '':
+		print("Can not read data from serial port, please check port connection")
+		print("Failed to get speed from CAN, Yingxian or GPS")
+		return
 	status_byte = int(din[8:10],16)
-	print("Din for speed: ", din)
-	velocity_source = ""
-	if (status_byte & 128) == 128:
+	print("Din for speed: ",din)
+	if (status_byte & 128) == 0:
 		velocity_source = "CAN"
 		print("Speed source: " ,velocity_source)
 		velocity = int(din[10:12],16)
-		print("Speed is: ", velocity)
-	elif (status_byte & 64) == 64:
+		print("velocity is: ",velocity)
+	elif (status_byte & 64) == 0:
 		velocity_source = "Yingxian"
 		print("Speed source: ",velocity_source)
 		velocity = int(din[10:12],16)
-		print("Speed is: ", velocity)
-	elif (status_byte & 32) == 32:
-		velocity_source = "Yingxian"
+		print("velocity is: ",velocity)
+	elif (status_byte & 32) == 0:
+		velocity_source = "GPS"
 		print("Speed source: " ,velocity_source)
 		velocity = int(din[10:12],16)
-		print("Speed is: ", velocity)
+		print("velocity is: ",velocity)
 	else:
 		print("Failed to get speed from CAN, Yingxian or GPS")
-		velocity = 0
+
+def getL(lstr):
+	lv = list()
+	for i in  range(4):
+		t = int(lstr[6-i*2:8-i*2],16)
+		lv.append(t)
+	data = struct.unpack('<f',struct.pack('4B',*lv))[0]
+	return  data
+
+
 
 def checkGPS(serial_handle):
 	din = serialRead(serial_handle)
+	if din == '':
+		print("Can not read data from serial port, please check port connection")
+		print("GPS -------------- Failed")
+		return
 	print("Din for GPS: ",din)
 	status_byte = int(din[8:10],16)
 	if (status_byte & 16) == 16:
 		print("GPS -------------- Check")
+		latitude = din[12:20]
+		longitude = din[20:28]
+		print("lattitude is ", getL(latitude))
+		print("longitude is ",getL(longitude))
 	else:
 		print("GPS -------------- Failed")
+
 
 
 serial_handle = serial.Serial(port='/dev/ttyAMA0',baudrate=19200,bytesize=8,timeout=1)
