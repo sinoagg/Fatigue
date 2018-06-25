@@ -49,6 +49,7 @@ def recvFiles(sock):
 	for ite in file_list:
 		defile = ite+".xml"
 		fsize = myrecv(sock,8).decode('utf-8')
+#		print("fsize: ",fsize)
 		if fsize[-2:] != "no":
 			f = open(ite,'wb')
 			dlen = int(fsize)
@@ -57,7 +58,6 @@ def recvFiles(sock):
 			f.close()
 			print(ite)
 			pc.decryptFile(ite,defile,pw,buffSize)
-
 	sock.close()
 
 
@@ -67,9 +67,11 @@ host = "106.14.160.95"
 port = 9501
 #Setup and initialize socket
 sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+cpuinfo = "00000000c3da3c1c1.1"
 sock.connect((host,port))
 print("socket connected")
-sock.send(getCPUSN().encode("utf-8"))
+#sock.send(getCPUSN().encode("utf-8"))
+sock.send(cpuinfo.encode('utf-8'))
 sock.send("ota".encode('utf-8'))
 recvO(sock)
 recvEn(sock)
