@@ -60,7 +60,6 @@ def recvFiles(sock):
 			pc.decryptFile(ite,defile,pw,buffSize)
 	sock.close()
 
-
 time.sleep(15)
 #print("sleep for 15 seca")
 host = "106.14.160.95"
@@ -77,5 +76,3 @@ recvO(sock)
 recvEn(sock)
 print("Files stored")
 recvFiles(sock)
-
-
