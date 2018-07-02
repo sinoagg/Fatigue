@@ -1,4 +1,3 @@
-#
 import numpy as np
 import time
 import dlib
@@ -11,6 +10,7 @@ import os
 import datetime
 import base64
 import errno
+#import sys
 
 
 def myrecv(conn,count):
@@ -146,22 +146,21 @@ def recgResl(ID):
 #read data from power board serial port
 def serialRead(serial_handle):
 	serial_handle.flushInput()
-	dout = b''
+#	dout = b''
 	cnt = 0
 	while 1:
 		din = serial_handle.read(28)
 		cnt += 1
-		if len(din) == 0 and cnt < 5:
-			print("cnt is ",cnt)
+		if len(din) == 0 and cnt < 8:
+#			print("cnt is ",cnt)
 			continue
-		if len(din) > 4 and  din[0]==52 and din[1] == 52 and din[2] == 53 and din[3] == 57:
-			break
-		elif cnt == 5:
+		if len(din) ==28 and  din[0]==52 and din[1] == 52 and din[2] == 53 and din[3] == 57:
+			return din.decode('utf-8')
+		elif cnt == 8:
 			print("Can not receive data from power board")
-			break
+			return ""
 		serial_handle.flushInput()
-	dout = din.decode('utf-8')
-	return dout
+
 
 #obtain and parse velocity
 #if failed to obtain return ""; if succeed return velocity value in string
@@ -170,17 +169,17 @@ def getVelocity(serial_handle):
 	if din == '':
 		return ""
 	status_byte = int(din[8:10],16)
-	if (status_byte & 128) == 128:
+	if (status_byte & 128) == 0:
 		velocity_source = "CAN"
 		print("Speed source: " ,velocity_source)
 		velocity = int(din[10:12],16)
 		return str(velocity)
-	elif (status_byte & 64) == 64:
+	elif (status_byte & 64) == 0:
 		velocity_source = "Yingxian"
 		print("Speed source: ",velocity_source)
 		velocity = int(din[10:12],16)
 		return str(velocity)
-	elif (status_byte & 32) == 32:
+	elif (status_byte & 32) == 0:
 		velocity_source = "GPS"
 		print("Speed source: " ,velocity_source)
 		velocity = int(din[10:12],16)
@@ -192,9 +191,13 @@ def getVelocity(serial_handle):
 #send drowsiness information
 def sendDrowInfo(drow_par,serial_handle,sock):
 	din = serialRead(serial_handle)
-	dout = drow_par+din+"".zfill(34)
-	sock.send(dout.encode('utf-8'))
-	return True
+	if din == "":
+		return False
+	else:
+		dp_hex = str(hex(drow_par))[2:]
+		dout = dp_hex+din[8:]+"".zfill(34)
+		sock.send(dout.encode('utf-8'))
+		return True
 
 #non blockging receive function
 def nonblockingRecv(sock):
@@ -246,17 +249,17 @@ SMK_BEEP = False
 DBIT = False
 
 print("[INFO]Loading resources.........................")
-phone_det = cv2.CascadeClassifier("phone15G.xml")
-face_pre = dlib.shape_predictor("landmark_predictor.dat")
-face_det = cv2.CascadeClassifier("face.xml")
-smoke_det = cv2.CascadeClassifier("lbpC.xml")
+phone_det = cv2.CascadeClassifier(".haarPHN.xml")
+face_pre = dlib.shape_predictor("landmark_pre.dat")
+face_det = cv2.CascadeClassifier(".haarFace.xml")
+smoke_det = cv2.CascadeClassifier(".lbpSMK.xml")
 print("[INFO]Opening camera............................")
 vc = cv2.VideoCapture(0)
 time.sleep(1.0)
 
 
 ser_intf = serial.Serial(port='/dev/ttyAMA0',baudrate=19200,bytesize=8,timeout=1)
-drow_par = 0x4459000100000000
+drow_par = 0x4459000100
 
 #setup sockets
 sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
@@ -300,7 +303,7 @@ while True:
 	
 #	drowsiness detection branch
 	if time.time()-Ivl < 300:
-		drow_par = 0x4459000100000000
+		drow_par = 0x4459000100
 		sock.send("drow,".encode('utf-8'))
 		print("drow branch instr sent, receiving surDet signal......")
 		surDet = nonblockingRecv(sock)
@@ -308,12 +311,10 @@ while True:
 		
 #		surveillance branch
 		if surDet == "sur":
-			print("SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS")
-			print("SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS")
-			print("SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS")
+			sur_tm = time.time()
 			while True:
 				sendSur(vc,sock)
-				if nonblockingRecv(sock) == "stp":
+				if nonblockingRecv(sock) == "stp" or time.time() - sur_tm > 180:
 					ce_tm = time.time()
 					is_tm = time.time()
 					alarm_tm = time.time()
@@ -358,7 +359,7 @@ while True:
 							h1 = frameSizePara*h1
 						cv2.putText(frame,"Calling behavior detected",(0,60),cv2.FONT_HERSHEY_SIMPLEX,0.7,(0,0,255),2)
 						PHO_BEEP = True
-						drow_par = drow_par|0x20000000
+						drow_par = drow_par|0x20
 					else:
 						PHO_BEEP = False
 					if len(smoke_gsts):
@@ -369,11 +370,9 @@ while True:
 							w2 = frameSizePara*w2
 							h2 = frameSizePara*h2
 						SMK_BEEP = True
-						drow_par = drow_par|0x10000000
+						drow_par = drow_par|0x10
 					else:
 						SMK_BEEP = False
-
-
 
 					x = frameSizePara*x
 					y = frameSizePara*y
@@ -405,18 +404,19 @@ while True:
 					if ear_counter >= EAR_CONSEC_FRAMES:
 						cv2.putText(frame,"Eye closed for 1 sec",(0,80),cv2.FONT_HERSHEY_SIMPLEX,0.7,(0,0,255),2)
 						EYE_BEEP = True
-						drow_par = drow_par|0x40000000
+						drow_par = drow_par|0x40
 					else:
 						EYE_BEEP = False
 				else:
 					ear_counter = 0
 					EYE_BEEP = False
+				
 				if mar >  MAR_THRESH :
 					mar_counter += 1
 					if mar_counter >= MAR_CONSEC_FRAMES:
 						cv2.putText(frame,"Yawn for 2 secs",(0,100),cv2.FONT_HERSHEY_SIMPLEX,0.7,(0,0,255),2)
 						MOU_BEEP = True
-						drow_par = drow_par|0x80000000
+						drow_par = drow_par|0x80
 					else:
 						MOU_BEEP = False
 				else:
@@ -426,7 +426,7 @@ while True:
 						
 			else:
 				FAC_BEEP = True
-				drow_par = drow_par|0x08000000
+				drow_par = drow_par|0x08
 				cv2.putText(frame,"No face detected",(0,20),cv2.FONT_HERSHEY_SIMPLEX,0.7,(0,0,255),2)
 
 
@@ -444,7 +444,7 @@ while True:
 				print("setting alarm ")
 				velocity = getVelocity(ser_intf)
 				if velocity == "":
-					pass
+					print("getVelocity failed, check the connection with power board")
 				else:
 					v = int(velocity)
 					if alarm_cnt > 3 and velocity > 30:
@@ -461,8 +461,9 @@ while True:
 				if time.time()-is_tm >= 180 and DBIT:#180ss
 					#IDNC illegal driving behavior with no camera exception
 					sock.send("IDNC,".encode('utf-8'))
-#					comment next line for now
-#					sendDrowInfo(drow_par,ser_intf,sock)
+#					check if drowsiness info sent successfully or not. if not suceeded, it probably because can't get info from power board.
+					if sendDrowInfo(drow_par,ser_intf,sock) == False:
+						print("Drowsiness info sending failed !")
 					sendImg(resized_frame,sock)
 					is_tm = time.time()
 					DBIT = False
@@ -474,10 +475,10 @@ while True:
 			elif time.time()-ce_tm >=700:#1440
 				#illegal driving behavior sending camera image
 				sock.send("IDCI,".encode('utf-8'))
-				drow_par = drow_par|0x01000000
-				
-#				commont next line for now ,
-#				sendDrowInfo(drow_par,ser_intf,sock)
+				drow_par = drow_par|0x01
+#				check if drowsiness info sent successfully or not. if not suceeded, it probably because can't get info from power board.
+				if sendDrowInfo(drow_par,ser_intf,sock) == False:
+					print("Drowsiness info sending failed !")
 				sendImg(resized_frame,sock)
 				is_tm = time.time()
 				ce_tm = time.time()
