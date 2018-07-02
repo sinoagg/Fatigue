@@ -9,6 +9,8 @@ import os
 import datetime
 import base64
 import errno
+import binascii
+import sys
 
 
 def myrecv(conn,count):
@@ -58,7 +60,9 @@ def mouth_aspect_ratio(mouth):
 def sendSur(videoHandler,conn):
 #	print("timeout value after setting blocking: ",sock.gettimeout())
 	ret,frame = videoHandler.read()
-	result,imgencode = cv2.imencode(".jpg",frame, encode_param)
+	resized_f = cv2.resize(frame,(0,0),fx=0.5,fy=0.5)
+	gray = cv2.cvtColor(resized_f,cv2.COLOR_BGR2GRAY)
+	result,imgencode = cv2.imencode(".jpg",gray, encode_param)
 	data = np.array(imgencode)
 	stringData = data.tostring()
 	stringData = base64.b64encode(stringData)
@@ -67,12 +71,14 @@ def sendSur(videoHandler,conn):
 	conn.send(stringData)
 
 #send drowsiness detecting image
-def sendImg(frame,conn):
-	result,imgencode = cv2.imencode(".jpg",frame, encode_param)
+def sendImg(frame,conn,tm_stmp):
+	resized_f = cv2.resize(frame,(0,0),fx=0.5,fy=0.5)
+	gray = cv2.cvtColor(resized_f,cv2.COLOR_BGR2GRAY)
+	result,imgencode = cv2.imencode(".jpg",gray, encode_param)
 	data = np.array(imgencode)
 	stringData = data.tostring()
 	stringData = base64.b64encode(stringData)
-	stringData +="==EOF==".encode("utf-8")
+	stringData = (stringData+"stmp"+tm_stmp).encode("utf-8")
 	conn.send(stringData)
 
 
@@ -84,7 +90,7 @@ def getCPUSN():
 		if line[0:6] == 'Serial':
 			cpuserial = line[10:26]
 	f.close()
-	return cpuserial+"1.1"
+	return cpuserial
 
 
 #read data from power board serial port
@@ -131,22 +137,39 @@ def getVelocity(serial_handle):
 		print("Failed to get speed from CAN, Yingxian or GPS")
 		return ""
 
-#send drowsiness information
-def sendDrowInfo(drow_par,serial_handle,sock):
-	din = serialRead(serial_handle)
-	if din == "":
-		return False
-	else:
-		dout = drow_par+din+"".zfill(34)
-		sock.send(dout.encode('utf-8'))
-		return True
+def convertGPS(gps):
+	gps_la = gps[0:8]
+	gps_lo = gps[8:16]
+	list_la = []
+	list_lo = []
+	for i in range(4):
+		list_la.append(int(gps_la[6-i*2:8-i*2],16))
+	la = str(struct.unpack('<f', struct.pack('4B', *list_la))[0]).zfill(20)
+#	print("function ",la)
+	for i in range(4):
+		list_lo.append(int(gps_lo[6-i*2:8-i*2],16))
+	lo = str(struct.unpack('<f', struct.pack('4B', *list_lo))[0]).zfill(20)
+#	print("function ",lo)
+	return la,lo
+
+
+##send drowsiness information
+#def sendDrowInfo(drow_par,serial_handle,sock):
+#	din = serialRead(serial_handle)
+#	if din == "":
+#		return False
+#	else:
+#		dp_hex = str(hex(drow_par))[2:]
+#		dout = dp_hex +din[8:]+"".zfill(34)+','
+#		sock.send(dout.encode('utf-8'))
+#		return True
 
 #non blockging receive function
 def nonblockingRecv(sock):
 	sock.setblocking(0)
 	surDet = ""
 	try:
-		msg = sock.recv(3)
+		msg = myrecv(sock,43)
 	except socket.error as e:
 		sock.setblocking(1)
 		err = e.args[0]
@@ -162,6 +185,35 @@ def nonblockingRecv(sock):
 #		print("received data: ",msg)
 	return surDet
 
+#package length is 43 bytes
+def CRC(msg):
+	msg_crc = msg[-6:-2]
+	before_crc = msg[:-6]
+	crc_cal = str(hex(binascii.crc_hqx(before_crc.encode(),0x0000)))[2:]
+	crc_cal = crc_cal.zfill(4)
+	if crc_cal == msg_crc:
+		return True
+	else:
+		return False
+
+def packParse(msg):
+	if CRC(msg) and msg[4] == "1":
+		return msg[5:9]
+	else:
+		print("CRC check failed or wrong package")
+		return ""
+
+
+
+# with CRC
+def setSendPack(cpu_no,plen,pro_ver,instr,par_list,track_ID,sock):
+	pack_head = "DY18"
+	pack_tail = "D5"
+	msg_before_crc = pack_head+plen+cpu_no+pro_ver+instr+par_list+track_ID
+	crc_cal = str(hex(binascii.crc_hqx(msg_before_crc.encode(),0x0000)))[2:]
+	crc = crc_cal.zfill(4)
+	msg = msg_before_crc+crc+pack_tail
+	sock.send(msg.encode('utf-8'))
 
 
 EAR_THRESH = 0.23
@@ -176,6 +228,7 @@ VEL_THR = 30
 CE_TM_THR = 200
 CE_TM_MAX_THR = 3600
 IS_TM_THR = 180
+pro_ver = "0220"
 
 ear_counter = 0
 mar_counter = 0
@@ -214,16 +267,20 @@ time.sleep(1.0)
 
 
 ser_intf = serial.Serial(port='/dev/ttyAMA0',baudrate=19200,bytesize=8,timeout=1)
-drow_par = 0x4459000100000000
+cpu_no = getCPUSN()
+track_ID = str(int(time.time())
 
 #setup sockets
 sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
 print("New socket connecting")
 sock.connect((host,port))
 print("New socket connected")
-# send cpu serial number to server
-sock.send((getCPUSN()+',').encode('utf-8'))
-sock.send("man,".encode('utf-8'))
+sendInstr(cpu_no,pro_ver,"1002", track_ID,sock)
+			   
+#recognize successfully
+setSendPack(cpu_no,"0032",pro_ver,"04","4001", track_ID,sock)
+pack_par = "00000000"+str(int(time.time()))
+setSendPack(cpu_no,"0040",pro_ver,"02",pack_par,track_ID,sock)
 
 		
 #counter = 0
@@ -231,23 +288,33 @@ sock.send("man,".encode('utf-8'))
 ce_tm = time.time()
 is_tm = time.time()
 alarm_tm = time.time()
+GPS_tm = time.time()
 alarm_cnt = 0
 
 while True:
 #	t_start = time.time()
-
-	drow_par = 0x4459000100000000
-	sock.send("drow,".encode('utf-8'))
+	drow_par = 0x00
+	setSendPack(cpu_no,"0032",pro_ver,"04","2001", track_ID,sock)
 #	print("drow branch instr sent, receiving surDet signal......")
-	surDet = nonblockingRecv(sock)
+	rec_pack = nonblockingRecv(sock)
+	if len(rec_pack) == 43:
+		surDet = packParse(rec_pack)
+	else:
+		surDet = ""
 #	print('surDet instr received: ',surDet)
 
 #		surveillance branch
-	if surDet == "sur":
+	if surDet == "3001":
+		sur_tm = time.time()
 		print("[INFO]In surveillance mode.......................")
 		while True:
 			sendSur(vc,sock)
-			if nonblockingRecv(sock) == "stp":
+			rec_pack = nonblockingRecv(sock)
+			if len(rec_pack) == 43:
+				surDet = packParse(rec_pack)
+			else:
+				surDet = ""
+			if surDet == "3002" or (time.time() - sur_tm) > 180:
 				ce_tm = time.time()
 				is_tm = time.time()
 				alarm_tm = time.time()
@@ -291,7 +358,7 @@ while True:
 						h1 = frameSizePara*h1
 #					cv2.putText(frame,"Calling behavior detected",(0,60),cv2.FONT_HERSHEY_SIMPLEX,0.7,(0,0,255),2)
 					PHO_BEEP = True
-					drow_par = drow_par|0x20000000
+					drow_par = drow_par|0x20
 				else:
 					PHO_BEEP = False
 				if len(smoke_gsts):
@@ -303,7 +370,7 @@ while True:
 						h2 = frameSizePara*h2
 						cv2.rectangle(frame, (x2, y2), (x2 + w2, y2 + h2), (255,0, 0), 2)
 					SMK_BEEP = True
-					drow_par = drow_par|0x10000000
+					drow_par = drow_par|0x10
 				else:
 					SMK_BEEP = False
 
@@ -339,7 +406,7 @@ while True:
 				if ear_counter >= EAR_CONSEC_FRAMES:
 #					cv2.putText(frame,"Eye closed for 1 sec",(0,80),cv2.FONT_HERSHEY_SIMPLEX,0.7,(0,0,255),2)
 					EYE_BEEP = True
-					drow_par = drow_par|0x40000000
+					drow_par = drow_par|0x40
 				else:
 					EYE_BEEP = False
 			else:
@@ -350,7 +417,7 @@ while True:
 				if mar_counter >= MAR_CONSEC_FRAMES:
 #					cv2.putText(frame,"Yawn for 2 secs",(0,100),cv2.FONT_HERSHEY_SIMPLEX,0.7,(0,0,255),2)
 					MOU_BEEP = True
-					drow_par = drow_par|0x80000000
+					drow_par = drow_par|0x80
 				else:
 					MOU_BEEP = False
 			else:
@@ -360,7 +427,7 @@ while True:
 
 		else:
 			FAC_BEEP = True
-			drow_par = drow_par|0x08000000
+#			drow_par = drow_par|0x08
 #			cv2.putText(frame,"No face detected",(0,20),cv2.FONT_HERSHEY_SIMPLEX,0.7,(0,0,255),2)
 
 
@@ -393,41 +460,63 @@ while True:
 #			every 3min send an image in which fatigue detected
 			if time.time()-is_tm >= IS_TM_THR and DBIT:#180ss
 				#IDNC illegal driving behavior with no camera exception
-				sock.send("IDNC,".encode('utf-8'))
+#				IDNC
+				setSendPack(cpu_no,"0032",pro_ver,"04","2002", track_ID,sock)
 #				check if drowsiness info sent successfully or not. if not suceeded, it probably because can't get info from power board.
-				if sendDrowInfo(drow_par,ser_intf,sock) == False:
-					print("Drowsiness info sending failed !")
-				sendImg(resized_frame,sock)
+			   	PB_data = serialRead(ser_intf)
+			   	drow_tm_stmp = str(int(time.time()))
+			   	if len(PB_data) > 0:
+			   		la,lo = convertGPS(PB_data[12:28])
+			   		drow_data = drow_par+PB_data[8:12]+la+lo+drow_tm_stmp
+			   	else:
+			   		drow_data = drow_par+"f".zfill(43)+drow_tm_stmp
+				setSendPack(cpu_no,"0066",pro_ver,"01",drow_data,track_ID,sock)
+			   
+				sendImg(resized_frame,sock,drow_tm_stmp)
 				print("Fatigue img sent")
 				is_tm = time.time()
 				DBIT = False
 #				print("RBP: IDNC sent.......................................")
 			else:
 				# leganl driving behavior
-				sock.send("LDXX,".encode('utf-8'))
+#			  	LDXX
+				setSendPack(cpu_no,"0032",pro_ver,"04","2005", track_ID,sock)
 #				print("RBP:LDXX sent")
 		elif time.time()-ce_tm >= CE_TM_MAX_THR:#1440
 			#illegal driving behavior sending camera image
-			sock.send("IDCI,".encode('utf-8'))
-			drow_par = drow_par|0x01000000
+#			IDCI
+			setSendPack(cpu_no,"0032",pro_ver,"04","2003", track_ID,sock)
+			drow_par = drow_par|0x01
 #				check if drowsiness info sent successfully or not. if not suceeded, it probably because can't get info from power board.
-			if sendDrowInfo(drow_par,ser_intf,sock) == False:
-				print("Drowsiness info sending failed !")
-			sendImg(resized_frame,sock)
+			PB_data = serialRead(ser_intf)
+			drow_tm_stmp = str(int(time.time()))
+			if len(PB_data) > 0:
+				la,lo = convertGPS(PB_data[12:28])
+				drow_data = drow_par+PB_data[8:12]+la+lo+drow_tm_stmp
+			else:
+			   drow_data = drow_par+"f".zfill(43)+drow_tm_stmp
+			setSendPack(cpu_no,"0066",pro_ver,"01",drow_data,track_ID,sock)
+			sendImg(resized_frame,sock,drow_tm_stmp)
 			print("Camera exception img sent")
 			is_tm = time.time()
 			ce_tm = time.time()
 #			print("RBP:IDCI sent............................................")
 		else:
 			#illegal driving behavior with camera exception no sending image
-			sock.send("IDCE,".encode('utf-8'))
+#			IDCE
+			setSendPack(cpu_no,"0032",pro_ver,"04","2004", track_ID,sock)
 #			print("RBP:IDCE sent")
-
-#	cv2.imshow("Frame",frame)
-#	key = cv2.waitKey(1) & 0xFF
-#	if key == ord("q"):
-#		break
-
-
-#	fps = 1 / (time.time() - t_start)
-#	print("FPS: {:.3f}".format(fps))
+			   
+#		send GPS info every min
+	if time.time() - GPS_tm > 60:
+		PB_data = serialRead(ser_intf)
+		tm = str(int(time.time()))
+		if len(PB_data) > 0:
+			la,lo = convertGPS(PB_data[12:28])
+			gps_info = PB_data[8:12]+la+lo+tm
+		else:
+			gps_info = "f".zfill(43)+tm
+		setSendPack(cpu_no,"0064",pro_ver,"03",gps_info,track_ID,sock)
+		GPS_tm = time.time()
+		
+			   
