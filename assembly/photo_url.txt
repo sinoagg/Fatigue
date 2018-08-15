@@ -1,2 +1,1 @@
-version=0100
-0 chuanliang.jpg https://raw.github.com/sinoagg/Fatigue/master/assembly/chuanliang.jpeg
+0 chuanliang.jpeg https://raw.github.com/sinoagg/Fatigue/master/assembly/chuanliang.jpeg
