@@ -269,7 +269,7 @@ def faceDetAndLandmark(resized_gray,clahe,frame):
 	for angle in [0, 20, -20]:
 		rmouth_eye = ()
 		rimg = rotateImage(gray, angle)
-		detected = face_det.detectMultiScale(rimg,scaleFactor = 1.02,minNeighbors= 4,minSize=(25, 25),flags=cv2.CASCADE_SCALE_IMAGE )
+		detected = face_det.detectMultiScale(rimg,scaleFactor = 1.2,minNeighbors= 4,minSize=(25, 25),flags=cv2.CASCADE_SCALE_IMAGE )
 		if len(detected):
 			for x,y,w,h in detected[-1:]:
 				bottom = int(y + 1.02*h)
@@ -313,7 +313,7 @@ def phoneDet(face_rect, gray,phone_det):
 		right = int(x+1.52*w)
 		bottom = int(y+1.4*h)
 		phone_gray = gray[top:bottom,left:right]
-		phones_rect = phone_det.detectMultiScale(phone_gray, scaleFactor=1.1,minNeighbors=4, minSize=(18, 18),flags=cv2.CASCADE_SCALE_IMAGE)
+		phones_rect = phone_det.detectMultiScale(phone_gray, scaleFactor=1.1,minNeighbors=2, minSize=(18, 18),flags=cv2.CASCADE_SCALE_IMAGE)
 
 	return phones_rect[-1:]
 
@@ -324,7 +324,7 @@ def smkDet(face_rect, gray,smoke_det):
 		top =int(y+0.7*h)
 		bottom = int(y+1.3*h)
 		smk_gray = gray[top:bottom,left:right]
-		smk_rect = smoke_det.detectMultiScale(smk_gray, scaleFactor=1.1,minNeighbors=5, minSize=(22, 22),flags=cv2.CASCADE_SCALE_IMAGE)
+		smk_rect = smoke_det.detectMultiScale(smk_gray, scaleFactor=1.1,minNeighbors=6, minSize=(22, 22),flags=cv2.CASCADE_SCALE_IMAGE)
 	
 	return smk_rect[-1:]
 
@@ -336,7 +336,7 @@ def faceRecg(vc,face_det,Known_names, Known_face_encodings):
 	frame = cv2.resize(frame,(0,0),fx=0.5,fy=0.5)
 	gray = cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
 	#using haar classifier to locate face location
-	rects = face_det.detectMultiScale(gray,scaleFactor=1.1,minNeighbors=5,minSize=(30,30),flags=cv2.CASCADE_SCALE_IMAGE)
+	rects = face_det.detectMultiScale(gray,scaleFactor=1.2,minNeighbors=5,minSize=(30,30),flags=cv2.CASCADE_SCALE_IMAGE)
 	face_locations=[]
 	for(x,y,w,h) in rects:
 		face_locations.append((y,x+w,y+h,x))
@@ -591,7 +591,7 @@ ser_intf = serial.Serial(port='/dev/ttyAMA0',baudrate=19200,bytesize=8,timeout=1
 cpu_no = getCPUSN()
 track_ID = str(int(time.time()))
 checkUpdate(pgm_vsn,ser_intf)
-selfCheck(ser_intf)
+#selfCheck(ser_intf)
 
 vc = cv2.VideoCapture(0)
 time.sleep(1.0)
@@ -856,6 +856,7 @@ while 1:
 				drow_par = 0x00
 				print("sending IDCI instr")
 				setSendPack(cpu_no,"0035",pgm_vsn,"04","2003", track_ID,sock)
+#				setSendPack(cpu_no,"0035",pgm_vsn,"04","6003", track_ID,sock)
 				drow_par = 0x00
 				drow_par = drow_par|0x01
 				PB_data = serialRead(ser_intf)
@@ -875,6 +876,7 @@ while 1:
 #			camera exception less than 3h, just send ce instr
 			else:
 				setSendPack(cpu_no,"0035",pgm_vsn,"04","2004", track_ID,sock)
+#				setSendPack(cpu_no,"0035",pgm_vsn,"04","6003", track_ID,sock)
 
 #		ill driving.
 		elif ID_Flag:
@@ -902,7 +904,9 @@ while 1:
 				if que_frq >1:
 					que_frq = 0
 				rcrdAndSendFtgVid(fra_que,vc,sock,que_frq)
-				setSendPack(cpu_no,"0035",pgm_vsn,"04","6002", track_ID,sock)
+				vid_tail = "stmp"+drow_tm_stmp+"D5KSN"
+				sock.send(vid_tail.encode("utf-8"))
+#				setSendPack(cpu_no,"0035",pgm_vsn,"04","6002", track_ID,sock)
 				print("fatigue video sent")
 				ids_tm = time.time()
 				ID_Flag = False
@@ -912,7 +916,8 @@ while 1:
 		else:
 #			print("legal driving, sending LDXX")
 			setSendPack(cpu_no,"0035",pgm_vsn,"04","2005", track_ID,sock)
-			
+#			setSendPack(cpu_no,"0035",pgm_vsn,"04","6003", track_ID,sock)
+
 
 #		send GPS info every min
 		if time.time() - gps_tm > GPS_SEND_FREQ:
@@ -933,14 +938,15 @@ while 1:
 			while 1:
 				name = faceRecg(vc,face_det,known_names,known_face_encodings)
 				if name :
-					print("{} is driving, initial state and going to drowsiness detection state".format(name))
+					print("{} is driving".format(name))
 					pack_par = "11"+name+str(int(time.time()))
 					setSendPack(cpu_no,"0043",pgm_vsn,"02",pack_par,track_ID,sock)
+					rcg_prd_tm = time.time()
 					break
 				elif time.time() - rcg_tm > 20 :
 					pack_par = "10000000"+str(int(time.time()))
 					setSendPack(cpu_no,"0043",pgm_vsn,"02",pack_par,track_ID,sock)
-					print("Unregister people")
+					print("recognition time out")
+					rcg_prd_tm = time.time()
 					break
-
 
