@@ -1,2 +1,3 @@
 0 chuanliang.jpg https://raw.github.com/sinoagg/Fatigue/master/assembly/chuanliang.jpg
 0 shouhou.jpg https://raw.github.com/sinoagg/Fatigue/master/assembly/shouhou.jpg
+0 lipingfan.jpeg https://raw.github.com/sinoagg/Fatigue/master/assembly/lipingfan.jpeg
