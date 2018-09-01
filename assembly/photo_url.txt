@@ -1,3 +1,14 @@
 0 chuanliang.jpg https://raw.github.com/sinoagg/Fatigue/master/assembly/chuanliang.jpg
 0 shouhou.jpg https://raw.github.com/sinoagg/Fatigue/master/assembly/shouhou.jpg
 0 lipingfan.jpeg https://raw.github.com/sinoagg/Fatigue/master/assembly/lipingfan.jpeg
+0 liaoyongqiang.jpg https://raw.github.com/sinoagg/Fatigue/master/assembly/liaoyongqiang.jpg
+0 liupeng.jpg https://raw.github.com/sinoagg/Fatigue/master/assembly/liupeng.jpg
+0 liuxiangyang.jpg https://raw.github.com/sinoagg/Fatigue/master/assembly/liuxiangyang.jpg
+0 liyongjin.jpg https://raw.github.com/sinoagg/Fatigue/master/assembly/liyongjin.jpg
+0 miaoyancong.jpg https://raw.github.com/sinoagg/Fatigue/master/assembly/miaoyancong.jpg
+0 wangxuwei.jpg https://raw.github.com/sinoagg/Fatigue/master/assembly/wangxuwei.jpg
+0 xiefeng.jpg https://raw.github.com/sinoagg/Fatigue/master/assembly/xiefeng.jpg
+0 xiejingfeng.jpg https://raw.github.com/sinoagg/Fatigue/master/assembly/xiejingfeng.jpg
+0 yuanyubin.jpg https://raw.github.com/sinoagg/Fatigue/master/assembly/yuanyubin.jpg
+0 zhangjianzhong.jpg https://raw.github.com/sinoagg/Fatigue/master/assembly/zhangjianzhong.jpg
+0 zhangqiang.jpg https://raw.github.com/sinoagg/Fatigue/master/assembly/zhangqiang.jpg
