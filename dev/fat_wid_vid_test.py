@@ -558,24 +558,24 @@ rcg_tm = time.time()
 time.sleep(5)
 
 
-while 1:
-
-	name = faceRecg(vc,face_det,known_names,known_face_encodings)
-	if name :
-		print("{} is driving, initial state and going to drowsiness detection state".format(name))
-		pack_par = "11"+name+str(int(time.time()))
-		setSendPack(cpu_no,"0043",pgm_vsn,"02",pack_par,track_ID,sock)
-		str_dp = "44590001000000c0"
-		ser_intf.write(str_dp.encode('utf-8'))
-		break
-	else:
-		if time.time() - rcg_tm > 10:
-			pack_par = "10000000"+str(int(time.time()))
-			setSendPack(cpu_no,"0043",pgm_vsn,"02",pack_par,track_ID,sock)
-			str_dp = "4459000100000000"
-			ser_intf.write(str_dp.encode('utf-8'))
-			rcg_tm = time.time()
-		print("Unregister people")
+#while 1:
+#
+#	name = faceRecg(vc,face_det,known_names,known_face_encodings)
+#	if name :
+#		print("{} is driving, initial state and going to drowsiness detection state".format(name))
+#		pack_par = "11"+name+str(int(time.time()))
+#		setSendPack(cpu_no,"0043",pgm_vsn,"02",pack_par,track_ID,sock)
+#		str_dp = "44590001000000c0"
+#		ser_intf.write(str_dp.encode('utf-8'))
+#		break
+#	else:
+#		if time.time() - rcg_tm > 10:
+#			pack_par = "10000000"+str(int(time.time()))
+#			setSendPack(cpu_no,"0043",pgm_vsn,"02",pack_par,track_ID,sock)
+#			str_dp = "4459000100000000"
+#			ser_intf.write(str_dp.encode('utf-8'))
+#			rcg_tm = time.time()
+#		print("Unregister people")
 
 
 
